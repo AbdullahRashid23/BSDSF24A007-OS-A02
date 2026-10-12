@@ -27,3 +27,5 @@ This project recreates the behavior of the Unix `ls` utility in a simplified for
 
 ## Feature 5 — v1.4.0`n- Added deterministic alphabetical sorting with `qsort` and `strcmp`.
 
+## Feature 6 — v1.5.0`n- Added ANSI colorized output for directories, executables, archives, symlinks, and special files.
+
