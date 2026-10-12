@@ -1,4 +1,4 @@
-# OS Assignment 02 Report
+﻿# OS Assignment 02 Report
 
 ## Summary
 
@@ -18,3 +18,6 @@ This project recreates the behavior of the Unix `ls` utility in a simplified for
 - [x] Recursive listing supports `-R`.
 - [x] Files are sorted alphabetically.
 - [x] ANSI colors highlight directory, executable, archive, link, and special files.
+
+## Feature 2 — v1.1.0`n- Implemented `-l` long listing with `stat`/`lstat`, `getpwuid`, `getgrgid`, and timestamp formatting.
+
