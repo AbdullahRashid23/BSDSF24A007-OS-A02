@@ -25,3 +25,5 @@ This project recreates the behavior of the Unix `ls` utility in a simplified for
 
 ## Feature 4 — v1.3.0`n- Implemented `-x` horizontal row-major output while preserving the default down-then-across layout.
 
+## Feature 5 — v1.4.0`n- Added deterministic alphabetical sorting with `qsort` and `strcmp`.
+
