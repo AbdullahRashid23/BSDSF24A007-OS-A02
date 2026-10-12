@@ -21,3 +21,5 @@ This project recreates the behavior of the Unix `ls` utility in a simplified for
 
 ## Feature 2 — v1.1.0`n- Implemented `-l` long listing with `stat`/`lstat`, `getpwuid`, `getgrgid`, and timestamp formatting.
 
+## Feature 3 — v1.2.0`n- Implemented default column display and terminal-aware width calculation.
+
