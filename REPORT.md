@@ -1,6 +1,7 @@
 # Operating Systems Programming Assignment 02
 
-**Roll number:** BSDSF24A007  
+**Roll number:** BSDSF24A007
+
 **GitHub repository:** [BSDSF24A007-OS-A02](https://github.com/AbdullahRashid23/BSDSF24A007-OS-A02)
 
 ## Project summary
