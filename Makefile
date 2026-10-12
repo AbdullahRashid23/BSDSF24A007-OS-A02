@@ -12,6 +12,6 @@ bin obj:
 	mkdir -p $@
 
 clean:
-	rm -rf bin obj
+	rm -f $(TARGET) $(TARGET).exe obj/*.o
 
 .PHONY: all clean

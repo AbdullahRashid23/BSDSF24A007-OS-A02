@@ -19,6 +19,16 @@
 #include <time.h>
 #include <unistd.h>
 
+#ifndef S_ISUID
+#define S_ISUID 04000
+#endif
+#ifndef S_ISGID
+#define S_ISGID 02000
+#endif
+#ifndef S_ISVTX
+#define S_ISVTX 01000
+#endif
+
 #define COLOR_RESET "\033[0m"
 #define COLOR_BLUE "\033[34m"
 #define COLOR_GREEN "\033[32m"
@@ -131,13 +141,13 @@ static void format_permissions(mode_t mode, char perms[11]) {
     perms[0] = S_ISDIR(mode) ? 'd' : (S_ISLNK(mode) ? 'l' : (S_ISFIFO(mode) ? 'p' : (S_ISBLK(mode) ? 'b' : (S_ISCHR(mode) ? 'c' : '-'))));
     perms[1] = (mode & S_IRUSR) ? 'r' : '-';
     perms[2] = (mode & S_IWUSR) ? 'w' : '-';
-    perms[3] = (mode & S_IXUSR) ? 'x' : '-';
+    perms[3] = (mode & S_ISUID) ? ((mode & S_IXUSR) ? 's' : 'S') : ((mode & S_IXUSR) ? 'x' : '-');
     perms[4] = (mode & S_IRGRP) ? 'r' : '-';
     perms[5] = (mode & S_IWGRP) ? 'w' : '-';
-    perms[6] = (mode & S_IXGRP) ? 'x' : '-';
+    perms[6] = (mode & S_ISGID) ? ((mode & S_IXGRP) ? 's' : 'S') : ((mode & S_IXGRP) ? 'x' : '-');
     perms[7] = (mode & S_IROTH) ? 'r' : '-';
     perms[8] = (mode & S_IWOTH) ? 'w' : '-';
-    perms[9] = (mode & S_IXOTH) ? 'x' : '-';
+    perms[9] = (mode & S_ISVTX) ? ((mode & S_IXOTH) ? 't' : 'T') : ((mode & S_IXOTH) ? 'x' : '-');
     perms[10] = '\0';
 }
 
@@ -154,17 +164,18 @@ static void print_long_entry(const Entry *entry) {
     const char *owner = "";
     const char *group = "";
 #endif
-    char time_buffer[32];
-    struct tm *tm_info = localtime(&entry->st.st_mtime);
-    strftime(time_buffer, sizeof(time_buffer), "%b %e %H:%M", tm_info);
+    const char *time_string = ctime(&entry->st.st_mtime);
+    if (time_string == NULL) {
+        time_string = "??? ??? ?? ??:??:?? ????";
+    }
 
-    printf("%s %3lu %-8s %-8s %8lld %s ",
+    printf("%s %3lu %-8s %-8s %8lld %.24s ",
            perms,
            (unsigned long)entry->st.st_nlink,
            owner,
            group,
            (long long)entry->st.st_size,
-           time_buffer);
+           time_string);
     print_name(entry->name, &entry->st);
     printf("\n");
 }
@@ -243,24 +254,32 @@ static void display_entries(Entry *entries, size_t count) {
     }
 }
 
-static void list_directory(const char *path, int recursive_depth) {
+static int list_directory(const char *path) {
     DIR *dir = opendir(path);
     if (dir == NULL) {
         perror(path);
-        return;
+        return 1;
     }
 
-    if (recursive_mode && strcmp(path, ".") != 0) {
+    if (recursive_mode) {
         printf("%s:\n", path);
-    } else if (recursive_mode && strcmp(path, ".") == 0) {
-        printf(".:\n");
     }
 
     Entry *entries = NULL;
     size_t count = 0;
     size_t capacity = 0;
-    struct dirent *entry;
-    while ((entry = readdir(dir)) != NULL) {
+    int had_error = 0;
+    for (;;) {
+        errno = 0;
+        struct dirent *entry = readdir(dir);
+        if (entry == NULL) {
+            if (errno != 0) {
+                perror(path);
+                had_error = 1;
+            }
+            break;
+        }
+
         if (!show_hidden && entry->d_name[0] == '.') {
             continue;
         }
@@ -271,13 +290,15 @@ static void list_directory(const char *path, int recursive_depth) {
         char *full_path = join_path(path, entry->d_name);
         if (full_path == NULL) {
             perror("malloc");
+            had_error = 1;
             continue;
         }
 
         struct stat st;
         if (FILE_STAT(full_path, &st) != 0) {
-            fprintf(stderr, "Failed to stat: %s\n", full_path);
+            perror(full_path);
             free(full_path);
+            had_error = 1;
             continue;
         }
 
@@ -287,35 +308,41 @@ static void list_directory(const char *path, int recursive_depth) {
             if (new_entries == NULL) {
                 perror("realloc");
                 free(full_path);
-                free_entries(entries, count);
-                closedir(dir);
-                return;
+                had_error = 1;
+                break;
             }
             entries = new_entries;
             capacity = new_capacity;
         }
 
         entries[count].name = strdup(entry->d_name);
+        if (entries[count].name == NULL) {
+            perror("strdup");
+            free(full_path);
+            had_error = 1;
+            break;
+        }
         entries[count].path = full_path;
         entries[count].st = st;
         count++;
     }
 
-    closedir(dir);
+    if (closedir(dir) != 0) {
+        perror(path);
+        had_error = 1;
+    }
     qsort(entries, count, sizeof(entries[0]), compare_entries);
 
     if (long_mode) {
-        if (count > 0) {
-            long long total = 0;
-            for (size_t i = 0; i < count; i++) {
+        long long total = 0;
+        for (size_t i = 0; i < count; i++) {
 #if !defined(_WIN32)
-                total += (entries[i].st.st_blocks / 2);
+            total += (entries[i].st.st_blocks / 2);
 #else
-                total += entries[i].st.st_size / 512;
+            total += entries[i].st.st_size / 512;
 #endif
-            }
-            printf("total %lld\n", total);
         }
+        printf("total %lld\n", total);
         for (size_t i = 0; i < count; i++) {
             print_long_entry(&entries[i]);
         }
@@ -326,13 +353,16 @@ static void list_directory(const char *path, int recursive_depth) {
     if (recursive_mode) {
         for (size_t i = 0; i < count; i++) {
             if (S_ISDIR(entries[i].st.st_mode)) {
-                printf("\n%s:\n", entries[i].path);
-                list_directory(entries[i].path, recursive_depth + 1);
+                printf("\n");
+                if (list_directory(entries[i].path) != 0) {
+                    had_error = 1;
+                }
             }
         }
     }
 
     free_entries(entries, count);
+    return had_error;
 }
 
 int main(int argc, char const *argv[]) {
@@ -361,19 +391,21 @@ int main(int argc, char const *argv[]) {
     colorize = isatty(STDOUT_FILENO);
 
     if (optind >= argc) {
-        list_directory(".", 0);
-        return 0;
+        return list_directory(".");
     }
 
+    int had_error = 0;
     for (int i = optind; i < argc; i++) {
-        if (argc - optind > 1) {
+        if (argc - optind > 1 && !recursive_mode) {
             printf("%s:\n", argv[i]);
         }
-        list_directory(argv[i], 0);
+        if (list_directory(argv[i]) != 0) {
+            had_error = 1;
+        }
         if (i + 1 < argc) {
             printf("\n");
         }
     }
 
-    return 0;
+    return had_error;
 }

@@ -1,60 +1,147 @@
-﻿# OS Assignment 02 Report
+# Operating Systems Programming Assignment 02
 
-## Summary
+## Project summary
 
-This project reimplements a subset of the Unix `ls` command in C, matching the assignment phases from the starter program through recursive, colorized, and sorted listing modes. The implementation includes the required feature branches, tags, and GitHub releases.
+This project extends the supplied `ls-v1.0.0.c` starter program with long
+listing (`-l`), terminal-width-based columns, horizontal display (`-x`),
+alphabetical sorting, file-type colors, and recursive listing (`-R`).
+The implementation uses a dynamic array of directory entries, `lstat()` on
+POSIX systems, `qsort()`, and the instructor's Makefile.
 
-## Build and verification
+## Build and run
 
-- `make` builds the project successfully.
-- The executable is produced in `bin/ls`.
-- Required output modes were checked: default listing, `-l`, `-x`, and `-R src`.
+Build from the project root:
 
-## Feature checklist
+```sh
+make clean
+make
+```
 
-- [x] Starter project structure created.
-- [x] Default listing works.
-- [x] Long listing supports `-l`.
-- [x] Horizontal listing supports `-x`.
-- [x] Recursive listing supports `-R`.
-- [x] Files are sorted alphabetically.
-- [x] ANSI colors highlight directories, executables, archives, symlinks, and special files.
+The executable is produced in `bin/`. Examples:
+
+```sh
+./bin/ls
+./bin/ls -l
+./bin/ls -x
+./bin/ls -R src
+```
 
 ## Report questions
 
-### 1. Compare the "down then across" and "across" display logic.
-The default vertical layout requires more pre-calculation because the program must determine the longest filename, calculate how many columns fit in the terminal width, compute the row count, and then map entries using `col * rows + row`. This is a column-major layout. The horizontal `-x` mode is simpler because it prints filenames sequentially in row-major order, only inserting a newline when the running horizontal width would exceed the terminal width. It still uses the longest filename to size each column, but it does far less index translation and layout planning.
+### Feature 2: Long listing
 
-### 2. How was the display mode selected?
-The program uses the standard `getopt()` loop in `main()` and maintains mode flags such as `long_mode`, `horizontal_mode`, and `recursive_mode`. After reading the directory entries into an array, the code checks the corresponding flags and calls the appropriate display routine: long listing for `-l`, horizontal output for `-x`, and the default column layout otherwise.
+#### 1. What is the crucial difference between `stat()` and `lstat()`? When is `lstat()` more appropriate for `ls`?
 
-### 3. Why sort directory entries in memory before printing?
-The `ls` output must be deterministic and user-friendly, so the entries must be read into an array, sorted, and then printed. This allows `qsort()` to compare every entry before rendering the final display. The main drawback is memory usage: a directory with millions of files can require a large amount of memory just to store names before the sort and print step.
+`stat(path, &info)` follows a symbolic link and returns metadata for its
+target. `lstat(path, &info)` returns metadata for the link itself. `lstat()`
+is appropriate when `ls` needs to identify and display a symbolic link as a
+link, rather than treating it as the target file. This implementation uses
+`lstat()` on POSIX systems and `stat()` on Windows.
 
-### 4. What is the `qsort()` comparison function and why does it use `const void *`?
-A valid comparison function for `qsort()` has the signature:
+#### 2. How can bitwise operators and predefined macros extract file type and permissions from `st_mode`?
+
+`st_mode` contains both file-type and permission bits. File-type macros such
+as `S_ISDIR(mode)` and `S_ISREG(mode)` test the type. Permission bits can be
+tested with bitwise AND, for example `(mode & S_IRUSR)` for owner-read and
+`(mode & S_IXUSR)` for owner-execute. The implementation uses these tests to
+format the `rwx` permission string, including set-user-ID, set-group-ID, and
+sticky bits.
+
+### Feature 3: Down-then-across columns
+
+#### 3. Explain the general logic for printing items in a down-then-across format. Why is one simple loop insufficient?
+
+The program first stores and sorts all entries, finds the longest filename,
+and calculates the number of columns and rows. It then iterates over rows and
+columns, selecting each cell with `column * rows + row`. A single sequential
+loop would print row-major order instead of filling each column from top to
+bottom before moving across.
+
+#### 4. What is `ioctl` used for here, and what are the limitations of using only an 80-column fallback?
+
+On POSIX systems, `ioctl` with `TIOCGWINSZ` obtains the terminal's current
+width so the column count can be calculated from the available space and the
+longest filename. A fixed 80-column fallback cannot adapt to wider or
+narrower terminals, so it can waste space or cause lines to exceed the
+visible terminal width. The implementation uses 80 columns when terminal
+width detection is unavailable.
+
+### Feature 4: Horizontal columns and display-mode selection
+
+#### 5. Compare the complexity of down-then-across and horizontal printing. Which requires more pre-calculation and why?
+
+Down-then-across requires more pre-calculation: it needs the maximum filename
+width, number of columns, row count, and a column-major index mapping.
+Horizontal output visits entries in row-major order and uses the available
+column count to wrap to the next row, so it requires less index remapping.
+
+#### 6. How does the program manage `-l`, `-x`, and default display modes?
+
+`getopt()` sets the `long_mode` and `horizontal_mode` flags. After collecting
+and sorting directory entries, `list_directory()` selects long output when
+`-l` is set; otherwise `display_entries()` prints columns, using
+`horizontal_mode` to choose row-major (`-x`) or down-then-across (default)
+ordering. When both `-l` and `-x` are supplied, long mode takes precedence.
+
+### Feature 5: Alphabetical sorting
+
+#### 7. Why must directory entries be read into memory before sorting, and what are the drawbacks for very large directories?
+
+Directory iteration yields entries incrementally in filesystem order, which
+is not guaranteed to be alphabetical. To sort the complete set before
+printing, the program stores entries in a dynamically allocated array and
+then sorts that array. Very large directories can consume substantial memory
+and sorting adds time; allocation can also fail.
+
+#### 8. What is the purpose and signature of the `qsort()` comparison function, and why does it take `const void *` arguments?
+
+The comparator tells `qsort()` how to order two array elements. Its generic
+signature is `int compare(const void *a, const void *b)`. Since `qsort()`
+works with arrays of any element type, it passes untyped pointers; the
+comparator converts them to pointers to the actual element type. This
+program compares two `Entry` objects by their `name` fields with `strcmp()`.
+It returns a negative value, zero, or a positive value when the first name is
+less than, equal to, or greater than the second.
+
+### Feature 6: Colorized output
+
+#### 9. How do ANSI escape codes produce color? Give the sequence used for green text.
+
+An ANSI escape sequence is written to the terminal to change its text
+attributes; a reset sequence restores the normal attributes. The
+implementation uses `"\033[32m"` to start green text and `"\033[0m"` to reset
+after the filename. For example:
 
 ```c
-int compare(const void *a, const void *b);
+printf("\033[32mgreen text\033[0m");
 ```
 
-The function casts the two pointers back to the actual element type, such as `const char **`, and then uses `strcmp()` to compare the names. The `const void *` type is required because `qsort()` is generic and operates on arbitrary data types; it accepts pointers to any item type and the comparator must therefore work with opaque pointer values.
+#### 10. Which `st_mode` bits identify executables for the owner, group, or others?
 
-### 5. How do ANSI escape codes produce color?
-ANSI color is produced by writing escape sequences to the terminal. The standard pattern is:
+The execute bits are `S_IXUSR` (owner), `S_IXGRP` (group), and `S_IXOTH`
+(others). The implementation treats a file as executable when at least one
+of these bits is set.
 
-```c
-printf("\033[0;32mgreen text\033[0m");
-```
+### Feature 7: Recursive listing
 
-`\033[` starts the escape sequence, `0;32m` means reset plus green, and `\033[0m` resets the terminal back to the default colors. This is how directory, executable, archive, symlink, and special-file output is colorized in the implementation.
+#### 11. What is a base case, and what stops this recursive listing from continuing forever?
 
-### 6. How is an executable file identified?
-An executable file is detected by checking the execute bits in `st_mode`. The relevant bits are:
+A base case is the condition that stops a recursive call from making further
+calls. Here, recursion proceeds only for entries whose metadata identifies
+them as directories; `.` and `..` are excluded, and symbolic links are
+identified with `lstat()` rather than followed. A directory with no eligible
+child directories therefore ends that path of recursion.
 
-- `S_IXUSR` for owner execute
-- `S_IXGRP` for group execute
-- `S_IXOTH` for other/anyone execute
+#### 12. Why must the recursive call use the full path to a subdirectory?
 
-The code checks whether any of these bits are set, and if so, it prints the name in green. This matches the requirement for executable-file coloring.
+The full path identifies the child relative to the directory currently being
+listed, such as `parent_dir/subdir`. Calling the bare name `subdir` would
+resolve it relative to the process's current working directory, not
+necessarily relative to `parent_dir`, so the program could fail to open it
+or list a different directory.
 
+## Git workflow
+
+The feature work is represented by the six feature branches, merge commits,
+annotated tags `v1.1.0` through `v1.6.0`, and matching GitHub releases with
+version-specific executable assets.

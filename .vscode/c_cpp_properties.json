@@ -1,0 +1,22 @@
+{
+  "configurations": [
+    {
+      "name": "MSYS2 UCRT64",
+      "compilerPath": "C:/msys64/ucrt64/bin/gcc.exe",
+      "includePath": [
+        "${workspaceFolder}/**",
+        "C:/msys64/ucrt64/include",
+        "C:/msys64/ucrt64/include/c++",
+        "C:/msys64/ucrt64/include/c++/x86_64-w64-mingw32"
+      ],
+      "defines": [
+        "_DEFAULT_SOURCE",
+        "_XOPEN_SOURCE=700"
+      ],
+      "cStandard": "c11",
+      "cppStandard": "c++17",
+      "intelliSenseMode": "windows-gcc-x64"
+    }
+  ],
+  "version": 4
+}
