@@ -29,3 +29,5 @@ This project recreates the behavior of the Unix `ls` utility in a simplified for
 
 ## Feature 6 — v1.5.0`n- Added ANSI colorized output for directories, executables, archives, symlinks, and special files.
 
+## Feature 7 — v1.6.0`n- Added recursive traversal for `-R` with directory headers and safe subdirectory handling.
+
